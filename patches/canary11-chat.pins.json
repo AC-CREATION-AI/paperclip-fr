@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Fingerprints of the files canary11-chat.patch touches. install.sh selects the patch only when every file matches beforeSha256 (null = file must not exist).",
+  "files": [
+    {
+      "path": "doc/UI-DISPLAY-LANGUAGES.md",
+      "beforeSha256": null,
+      "afterSha256": "df0b2cd1d83b1cb754fe165b6ab2c39b8bc1831991dda23d8f5c6ecfc72341f4"
+    },
+    {
+      "path": "ui/src/components/ActivityRow.tsx",
+      "beforeSha256": "32ffda049a1da3ca5202b0814cd80e67eaa08c3b6d089304cc529a790aabeb4f",
+      "afterSha256": "d38138418cda82ba3b2af102d2fc80e9527eb5367235e61055ded532d7ffd34d"
+    },
+    {
+      "path": "ui/src/components/DisplayLanguageSelect.test.tsx",
+      "beforeSha256": null,
+      "afterSha256": "27c15e19a50550cf4cf841d486ebc7623d44a9f2e4fc526ca6c01d8902704646"
+    },
+    {
+      "path": "ui/src/components/DisplayLanguageSelect.tsx",
+      "beforeSha256": null,
+      "afterSha256": "d291e084bbbce739fcf69e10bc5ba6739e740e7b386d67d07d0024eecd373120"
+    },
+    {
+      "path": "ui/src/components/InteractionGovernancePanel.tsx",
+      "beforeSha256": "bec21022c6017047a2b4bb250c61285f4a2c63bb9e1252e0029efc537b7efdef",
+      "afterSha256": "2ded3d626aeab1b4e6b8e22e439624dda773c842228c7ec7e432e2bc6432dd3c"
+    },
+    {
+      "path": "ui/src/components/SidebarAccountMenu.production.tsx",
+      "beforeSha256": "64bf4248a3c3eeea9920145d9e7548790cbad1806ab231b4d153c2667590ce26",
+      "afterSha256": "305c76156c41b861fe8306bda13b0dc2ad8c5990f045bfd177fccf841ef7597e"
+    },
+    {
+      "path": "ui/src/components/SidebarAccountMenu.tsx",
+      "beforeSha256": "29d8282784858ab11f9394a3671f765e3606bc63f592267a76fcccc380fa724b",
+      "afterSha256": "bbe0ba01e0d7f959cdf2f2f062386423b4769b4c6f34e6e2370a54375813d537"
+    },
+    {
+      "path": "ui/src/components/SidebarCompanyMenu.tsx",
+      "beforeSha256": "02e76b527ab8cb385264f38630edb359e8b512b2915c01d4800b5d62f28082db",
+      "afterSha256": "58561c9010d4c86ed3b8de933cc3f2024d1fa013f7b23a3715621ace3573c45f"
+    },
+    {
+      "path": "ui/src/components/StatusBadge.tsx",
+      "beforeSha256": "e21be48eec7190e6be911aff72a695e2a5d566aa097b8b82fff9d311249e61a0",
+      "afterSha256": "5a569bb03b29553b1406877b81a8ce6893fd7981eca68d7c835d9206b14213ff"
+    },
+    {
+      "path": "ui/src/components/StatusIcon.tsx",
+      "beforeSha256": "e8ef3696aca39f55696d50f7cd593123b3863d8dbe2caea4ebfbc1291ec0f24f",
+      "afterSha256": "ec012164326b92cfa5074456928c6a9e06847832145dca4734f6f6f3269c3627"
+    },
+    {
+      "path": "ui/src/components/coordinator/CoordinatorRelativeTime.tsx",
+      "beforeSha256": "f91917fa50e82f584cd6e0bb536b404c4270e207bfc414da22c78b74831e800d",
+      "afterSha256": "f4771f712fad1564cf50c6862e4ad77d8eb467ee9adfa2e2057dadac7cfe3a95"
+    },
+    {
+      "path": "ui/src/components/task-chat/TaskChatComposer.tsx",
+      "beforeSha256": "2b84bf47d726258b674f810c2020564f22b88f87d1020565b873df547eb5e7bf",
+      "afterSha256": "b66ac277adae548ac17db2506edd06c81167377a57aae58e323296640877a6e5"
+    },
+    {
+      "path": "ui/src/i18n/display-catalog.test.ts",
+      "beforeSha256": null,
+      "afterSha256": "bb7f3d88855ea948fcab11824f17d10c9d7586cba11a5a72f1af3b5522314f5f"
+    },
+    {
+      "path": "ui/src/i18n/display-dom.test.ts",
+      "beforeSha256": null,
+      "afterSha256": "c509d11c537506c7783af34aff7fbb6c19a98d66d7e5a1d4afab783eaebffe94"
+    },
+    {
+      "path": "ui/src/i18n/display-dom.ts",
+      "beforeSha256": null,
+      "afterSha256": "cab39fb1d8721a784b58ee377fe4510067bfe3e7b408c3338f0dcd7486bd7a51"
+    },
+    {
+      "path": "ui/src/i18n/display-language.test.tsx",
+      "beforeSha256": null,
+      "afterSha256": "9abf1ba19688c6e56e289f910ec7b83fb6d60eb4d2fa5e4532dcff624d482137"
+    },
+    {
+      "path": "ui/src/i18n/display-text.test.ts",
+      "beforeSha256": null,
+      "afterSha256": "fdef31495d8e0b474817e37341f24068b8a88db64b9cc28b28d7afa57d3ee50d"
+    },
+    {
+      "path": "ui/src/i18n/display-text.ts",
+      "beforeSha256": null,
+      "afterSha256": "2223e483530d4a3e7991092599a23e278ee2ae7362078b0f1dd3531e6a349a1c"
+    },
+    {
+      "path": "ui/src/lib/blockedInbox.ts",
+      "beforeSha256": "28406b03e9f317628c7fa0389b7e7bbfc29c2dcaa6231fc67b03dd0c2292dabb",
+      "afterSha256": "e8ea07ba540ef6d35cc9600b401d23553318b09e74c58a3251bf6a310e078abf"
+    },
+    {
+      "path": "ui/src/lib/timeAgo.ts",
+      "beforeSha256": "a9daffa1258e2458e06a91013bcbffd7edcb43bbf2e7e47844a2ff1bf88e871a",
+      "afterSha256": "3832078faf22d9f30671c83292837770a0801bacba9ec5922036078d4704ae95"
+    },
+    {
+      "path": "ui/src/lib/utils.ts",
+      "beforeSha256": "8bccdbae8c9a62f8801d9cb993dfcd3689b98f0783d5d7fbb2998d553b4efa46",
+      "afterSha256": "09f8949b2d245631cde12d801779f0d3dec68b0899b2a69efadde1c695382723"
+    },
+    {
+      "path": "ui/src/lib/vite-display-copy.test.ts",
+      "beforeSha256": null,
+      "afterSha256": "cb7e403f49ef42ca5bb189c9c4fc942a56a607cf9a9721ea3b65114659958572"
+    },
+    {
+      "path": "ui/src/lib/vite-display-copy.ts",
+      "beforeSha256": null,
+      "afterSha256": "f1534ab0d3ada4d433ef2953d1cc29ee87756baec9ad484f69b05392b7f5cbca"
+    },
+    {
+      "path": "ui/src/main.tsx",
+      "beforeSha256": "281447a837ba9d84785a4b743a78f2fda4cd023eb218099900820913ed1db742",
+      "afterSha256": "ec320ef572035128c96b2f00f17a0c9fd286ea76e45c7db23ae7611fb9fdf9d8"
+    },
+    {
+      "path": "ui/src/pages/Auth.tsx",
+      "beforeSha256": "3b9ecc251b904329c9d285e5af003f46b09fd4393e17c2b09ecdc1678e085b4a",
+      "afterSha256": "7eaeaf1e39ffae651360d9ea0e07ec072f0b6ed223434d2472eba4b6b3962a62"
+    },
+    {
+      "path": "ui/vite.config.ts",
+      "beforeSha256": "c8caa406ea2431984a8a186232c924fd38659f817c3ba292b57ba7c74eb58169",
+      "afterSha256": "44e99063a6bc8fe7edc164e37c95aebee920e42424194e9a90ff971d4de79d84"
+    }
+  ]
+}

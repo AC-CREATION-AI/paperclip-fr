@@ -23,6 +23,24 @@ catalog_src="$here/catalog/fr.json"
 mapfile -t patches < <(ls -1 "$here"/patches/*.patch 2>/dev/null | sort -r)
 [ "${#patches[@]}" -gt 0 ] || { echo "error: no patch in $here/patches" >&2; exit 2; }
 
+# A patch with a sibling <name>.pins.json (sha256 of every touched file before
+# the patch) is eligible only when the target tree matches those fingerprints.
+pins_match() {
+  local pins="${1%.patch}.pins.json"
+  [ -f "$pins" ] || return 0
+  python3 - "$pins" "$target" <<'PY'
+import hashlib, json, os, sys
+pins, root = sys.argv[1], sys.argv[2]
+for row in json.load(open(pins))["files"]:
+    f = os.path.join(root, row["path"])
+    want = row["beforeSha256"]
+    if want is None:
+        if os.path.lexists(f): sys.exit(1)
+    elif not os.path.isfile(f) or hashlib.sha256(open(f, "rb").read()).hexdigest() != want:
+        sys.exit(1)
+PY
+}
+
 applied=""
 for p in "${patches[@]}"; do
   if (cd "$target" && git apply -R --check "$p" >/dev/null 2>&1); then applied="$p"; break; fi
@@ -34,7 +52,7 @@ if [ -n "$applied" ]; then
 else
   chosen=""
   for p in "${patches[@]}"; do
-    if (cd "$target" && git apply --check "$p" >/dev/null 2>&1); then chosen="$p"; break; fi
+    if pins_match "$p" && (cd "$target" && git apply --check "$p" >/dev/null 2>&1); then chosen="$p"; break; fi
   done
   if [ -z "$chosen" ]; then
     echo "error: no patch applies to this Paperclip tree. Nothing was changed." >&2
