@@ -52,4 +52,22 @@ printf 'something else\n' > "$repo/ui/src/main.tsx"
 if bash "$pkg/install.sh" "$repo" >/dev/null 2>&1; then fail "install should refuse a non-matching tree"; fi
 [ "$(cat "$repo/ui/src/main.tsx")" = "something else" ] || fail "refused install modified the tree"
 
-echo "OK: install / idempotence / uninstall / refusal"
+# Fingerprint selection: a patch with a .pins.json is eligible only on a matching tree.
+pkg2="$work/pkg2"; mkdir -p "$pkg2/patches" "$pkg2/catalog"
+cp "$here/install.sh" "$here/uninstall.sh" "$pkg2/"; cp "$pkg/catalog/fr.json" "$pkg2/catalog/"
+cp "$pkg/patches/test.patch" "$pkg2/patches/test.patch"
+repo2="$work/paperclip2"; mkdir -p "$repo2/ui/src"
+git -C "$repo2" init -q
+printf 'console.log("hi");\n' > "$repo2/ui/src/main.tsx"
+good="$(sha256sum "$repo2/ui/src/main.tsx" | cut -d' ' -f1)"
+printf '{"files":[{"path":"ui/src/main.tsx","beforeSha256":"0000","afterSha256":null}]}\n' > "$pkg2/patches/test.pins.json"
+if bash "$pkg2/install.sh" "$repo2" >/dev/null 2>&1; then fail "install must refuse when fingerprints differ"; fi
+[ "$(sha256sum "$repo2/ui/src/main.tsx" | cut -d' ' -f1)" = "$good" ] || fail "fingerprint refusal modified the tree"
+printf '{"files":[{"path":"ui/src/main.tsx","beforeSha256":"%s","afterSha256":null}]}\n' "$good" > "$pkg2/patches/test.pins.json"
+bash "$pkg2/install.sh" "$repo2" >/dev/null || fail "install must accept matching fingerprints"
+grep -q 'i18n' "$repo2/ui/src/main.tsx" || fail "pinned patch not applied"
+
+# The shipped canary.11 pins file is well-formed.
+python3 -c "import json; d=json.load(open('$here/patches/canary11-chat.pins.json')); assert len(d['files'])==26" || fail "canary11 pins file invalid"
+
+echo "OK: install / idempotence / uninstall / refusal / fingerprints"

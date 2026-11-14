@@ -19,8 +19,11 @@ Interface de [Paperclip](https://github.com/paperclipai/paperclip) en français,
 |---|---|
 | `v2026.1106.0.patch` | release amont `v2026.1106.0` |
 | `master-c1451814c.patch` | `master` amont au 14 novembre 2026 (canary 2026.1114) |
+| `canary11-chat.patch` | `v2026.1101.0-canary.11` (commit `7751fc310`) avec le correctif chat `createUuid` (HTTP sur réseau local) déjà appliqué à `TaskChatComposer.tsx`, `TaskChatThread.tsx` et `IssueDetail.tsx` |
 
 `install.sh` essaie les patches du plus récent au plus ancien et applique le premier qui s'adapte. Si aucun ne convient, il ne modifie rien et le dit.
+
+Un patch peut avoir un fichier `<nom>.pins.json` à côté de lui : empreintes SHA-256 « avant » de chaque fichier touché. `install.sh` ne retient alors ce patch que si l'arbre cible correspond à toutes les empreintes (cas de `canary11-chat.patch`, qui préserve le correctif chat). Contrôle hors ligne sur une vraie source : `scripts/check-canary11.sh <clone-paperclip> [<patch-correctif-chat>]` ou `scripts/check-all-targets.sh <clone-paperclip> [<patch-correctif-chat>]` pour vérifier toutes les cibles amont en une passe.
 
 ## Installation
 
@@ -87,7 +90,7 @@ git clone https://github.com/AC-CREATION-AI/paperclip-fr.git && cd paperclip-fr
 cd /path/to/paperclip && pnpm --filter @paperclipai/ui build
 ```
 
-`install.sh` picks the newest patch that fits, backs up touched files in `.paperclip-fr-backup/`, and does nothing if the tree is already patched or if no patch fits.
+`install.sh` picks the newest patch that fits (a patch with a `<name>.pins.json` of pre-patch SHA-256 fingerprints is only eligible when the target tree matches them; `canary11-chat.patch` targets upstream `v2026.1101.0-canary.11` with a local chat fix already applied), backs up touched files in `.paperclip-fr-backup/`, and does nothing if the tree is already patched or if no patch fits.
 
 **Update.** Update Paperclip, remove the old patch (`./uninstall.sh`) if it no longer fits, `git pull` this repo, run `./install.sh` again. A nightly CI job applies the package on upstream `master` and the latest release and opens an issue on failure.
 
