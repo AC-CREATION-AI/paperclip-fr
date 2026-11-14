@@ -1,0 +1,4 @@
+dist/
+upstream/
+.paperclip-fr-backup/
+node_modules/
