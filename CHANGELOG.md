@@ -6,6 +6,11 @@ Format : une ligne par changement visible. Les changements en cours vivent dans 
 
 (voir `changelog.d/`)
 
+## [0.1.1] - 2026-11-14
+
+### Ajouté
+- Ajoute `canary11-chat.patch` (cible `v2026.1101.0-canary.11` avec correctif chat), la sélection par empreintes `*.pins.json` dans `install.sh`, et le script de vérification multi-cibles réelles `scripts/check-all-targets.sh`.
+
 ## [0.1.0] - 2026-11-14
 
 ### Ajouté
