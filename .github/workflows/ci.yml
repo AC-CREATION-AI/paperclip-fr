@@ -22,6 +22,9 @@ jobs:
       - name: Install/uninstall tests
         run: bash tests/test-install.sh
       - name: Anti-leak
+        env:
+          # Private-name patterns live in a repo secret, never in the public tree.
+          LEAK_EXTRA_PATTERN: ${{ secrets.LEAK_EXTRA_PATTERN }}
         run: bash scripts/check-anti-leak.sh
       - name: gitleaks
         run: |

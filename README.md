@@ -13,8 +13,6 @@ Interface de [Paperclip](https://github.com/paperclipai/paperclip) en français,
 - Ne sont jamais traduits : le code, les éditeurs, le contenu markdown, les données utilisateur et les valeurs envoyées à l'API.
 - Pourquoi pas un plugin ? Le SDK de plugins ne peut pas porter la langue de l'interface (i18next est initialisé par l'hôte, pas de point d'entrée « langue »). Conclusion de l'étude : surcouche.
 
-Captures d'écran : [À COMPLÉTER : captures avant/après de l'interface en français, à produire sur une instance de test sans donnée réelle].
-
 ## Versions de Paperclip prises en charge
 
 | Fichier dans `patches/` | Cible |
@@ -44,7 +42,7 @@ L'installation sauvegarde les fichiers modifiés dans `.paperclip-fr-backup/` et
 2. Si le patch précédent est encore appliqué et ne convient plus : `./uninstall.sh /chemin/vers/paperclip` avant la mise à jour, ou `git checkout -- .` sur les fichiers touchés.
 3. Récupérez la dernière version de ce dépôt (`git pull`) puis relancez `./install.sh`.
 
-Chaque nuit, la CI applique le paquet sur le dernier `master` et la dernière release amont. En cas d'échec, une issue est ouverte ici et le suivi interne est alerté.
+Chaque nuit, la CI applique le paquet sur le dernier `master` et la dernière release amont. En cas d'échec, une issue est ouverte ici.
 
 ## Désinstallation
 
@@ -66,7 +64,7 @@ Inverse le patch, supprime le catalogue, le marqueur et la sauvegarde. Relançab
 1. Créez `catalog/<code>.json` (ex. `de.json`) avec les mêmes clés que `fr.json`.
 2. Ajoutez le code dans `DISPLAY_LOCALES` du patch (fichier `ui/src/i18n/display-text.ts` amont) et un libellé dans le sélecteur.
 3. Faites installer le catalogue par `install.sh` (copie vers `ui/src/i18n/display/<code>.json`).
-4. Ouvrez une PR. Les langues autres que le français sont les bienvenues mais ne sont pas encore automatisées : [À COMPLÉTER : procédure validée après la première langue ajoutée].
+4. Ouvrez une PR. Les langues autres que le français sont les bienvenues mais ne sont pas encore automatisées : la procédure ci-dessus est à affiner avec la première langue ajoutée.
 
 ## Licence
 
@@ -79,8 +77,6 @@ MIT, comme Paperclip. Voir [LICENSE](LICENSE). Les patches sont dérivés du cod
 **paperclip-fr** is a French display layer for [Paperclip](https://github.com/paperclipai/paperclip), shipped as a versioned overlay: source patches, a separate translation catalog (`catalog/fr.json`, about 16,000 entries) and idempotent `install.sh` / `uninstall.sh` scripts. Unofficial community package, based on upstream PR [#18468](https://github.com/paperclipai/paperclip/pull/18468); it becomes obsolete if that PR is merged.
 
 **What it does.** English stays the default. French is picked from the browser language or the language picker (sign-in page, account menu). Text is wrapped in `displayText("…")` at build time and looked up in the catalog; a missing entry falls back to English. Code, editors, markdown content, user data and API values are never translated. Why not a plugin: the plugin SDK has no hook for the UI language, so an overlay is the supported option.
-
-Screenshots: [TO COMPLETE: before/after screenshots from a test instance with no real data].
 
 **Install** (needs `git`, `bash`, a git clone of the Paperclip source):
 
@@ -99,6 +95,6 @@ cd /path/to/paperclip && pnpm --filter @paperclipai/ui build
 
 **Contribute.** Fix translations in `catalog/fr.json` (key = English text, keep the same `{{vN}}` placeholders, no added HTML or URLs). New upstream version: `scripts/refresh-patch.sh`. Every PR updates this README and adds a `changelog.d/` fragment. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-**Add a language.** Add `catalog/<code>.json`, register the code in `DISPLAY_LOCALES` and the picker, let `install.sh` copy it. [TO COMPLETE: validated procedure once a second language exists].
+**Add a language.** Add `catalog/<code>.json`, register the code in `DISPLAY_LOCALES` and the picker, let `install.sh` copy it. Other languages are welcome but not automated yet; this procedure will be refined with the first added language.
 
 **License.** MIT, same as Paperclip.
