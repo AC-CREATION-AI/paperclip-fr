@@ -1,0 +1,63 @@
+name: Nightly upstream check
+
+on:
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  apply:
+    name: Apply on ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [master, latest-release]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone upstream Paperclip
+        run: |
+          git clone --filter=blob:none https://github.com/paperclipai/paperclip.git upstream
+          cd upstream
+          if [ "${{ matrix.target }}" = "latest-release" ]; then
+            ref="$(git tag -l 'v2026.*' --sort=-v:refname | head -n 1)"
+          else
+            ref="origin/HEAD"
+          fi
+          git checkout -q --detach "$ref"
+          echo "UPSTREAM_REF=$ref" >> "$GITHUB_ENV"
+          echo "UPSTREAM_SHA=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+      - name: Dry-run install
+        id: dry
+        run: bash install.sh --dry-run upstream
+      - name: Install, check marker, uninstall, tree must be clean
+        run: |
+          bash install.sh upstream
+          test -f upstream/ui/src/i18n/display/fr.json
+          bash install.sh upstream | grep -q "already applied"
+          bash uninstall.sh upstream
+          test -z "$(git -C upstream status --porcelain)"
+      - name: Open an issue if the package no longer applies
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ALERT_URL: ${{ secrets.PAPERCLIP_ALERT_URL }}
+          ALERT_TOKEN: ${{ secrets.PAPERCLIP_ALERT_TOKEN }}
+        run: |
+          title="Nightly: patch does not apply on ${{ matrix.target }} (${UPSTREAM_REF:-unknown} @ ${UPSTREAM_SHA:-unknown})"
+          body="The nightly job could not apply paperclip-fr on upstream ${{ matrix.target }}. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}. Regenerate the patch with scripts/refresh-patch.sh."
+          existing="$(gh issue list --repo "${{ github.repository }}" --state open --label nightly-failure --search "${{ matrix.target }}" --json number --jq '.[0].number' || true)"
+          if [ -z "$existing" ]; then
+            gh label create nightly-failure --repo "${{ github.repository }}" --color B60205 2>/dev/null || true
+            gh issue create --repo "${{ github.repository }}" --title "$title" --body "$body" --label nightly-failure
+          else
+            gh issue comment "$existing" --repo "${{ github.repository }}" --body "Still failing: $title"
+          fi
+          if [ -n "${ALERT_URL:-}" ]; then
+            curl -fsS -X POST "$ALERT_URL" -H "Authorization: Bearer ${ALERT_TOKEN:-}" -H "Content-Type: application/json" \
+              -d "{\"title\":\"paperclip-fr nightly: ${{ matrix.target }}\",\"body\":\"$title\"}" || true
+          fi
