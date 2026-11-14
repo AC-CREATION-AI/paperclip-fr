@@ -25,6 +25,7 @@ jobs:
         env:
           # Private-name patterns live in a repo secret, never in the public tree.
           LEAK_EXTRA_PATTERN: ${{ secrets.LEAK_EXTRA_PATTERN }}
+          REQUIRE_EXTRA_PATTERN: "1"
         run: bash scripts/check-anti-leak.sh
       - name: gitleaks
         run: |
