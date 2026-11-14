@@ -1,0 +1,1533 @@
+diff --git a/doc/UI-DISPLAY-LANGUAGES.md b/doc/UI-DISPLAY-LANGUAGES.md
+new file mode 100644
+index 000000000..cc8cef47f
+--- /dev/null
++++ b/doc/UI-DISPLAY-LANGUAGES.md
+@@ -0,0 +1,31 @@
++# UI display languages
++
++The board UI can show its interface text in French. English stays the default and the reference.
++
++## How the UI picks a language
++
++1. A saved choice in `localStorage` (`paperclip:locale`, value `en` or `fr`) wins.
++2. Otherwise, the UI uses the first browser language in `navigator.languages` that it supports (English or French). `fr`, `fr-FR` and `fr-CA` select French. `en-GB` before `fr-FR` selects English.
++3. Otherwise, the UI uses English.
++
++The language picker is on the sign-in page and in the account menu. A change saves the choice and reloads the page.
++
++## How the translation works
++
++- `ui/src/lib/vite-display-copy.ts` is a Vite plugin. At build time, it wraps JSX text and display attributes (`title`, `aria-label`, `placeholder`, `alt`, `label`, `description` and similar) in `displayText("English source")`. Template literals keep their values out of the sentence: `` `Found ${count} agents` `` becomes `displayText("Found {{v0}} agents", { v0: count })`.
++- `ui/src/i18n/display-text.ts` looks up the English source in `ui/src/i18n/display/<locale>.json`. The key is the English text with collapsed whitespace. A missing or unsafe entry falls back to English.
++- In French only, `ui/src/i18n/display-dom.ts` also translates exact text nodes and display attributes that the build step cannot see (labels in data arrays, for example), and shows dates in the French format.
++- The catalog also holds the product copy that the server sends and the UI shows as is: descriptions of built-in apps, plugins and skills, and the fallback activity verbs. The DOM layer shows this copy in French.
++- When a template value is itself a short interface label from the catalog (60 characters or less, for example `Enable` in `` `${verb} ${name}` ``), French shows the translated label. Other values, such as names and titles, show as they are.
++- In English, the catalog does not load, the DOM layer does not start, and `Date`/`Intl` are not changed. `displayText` returns the source text.
++
++## What is never translated
++
++- `code`, `pre`, `kbd`, `samp`, `script`, `style`, `textarea`, inputs, editors (`.ProseMirror`, `.mdxeditor`, `.cm-editor`, `contenteditable`) and markdown content.
++- Values sent to the API, object properties that are not display attributes, and user data.
++- `<option>` elements without a `value` attribute, because the browser submits their text.
++- Any element with `data-no-translate` and its children. Add this attribute to opt a subtree out.
++
++## Catalog rules
++
++`ui/src/i18n/display-catalog.test.ts` checks each catalog. A translation must keep the same `{{vN}}` placeholders, must not add HTML tags, URLs or `javascript:`, and must respect the same length limit as the i18next locale validation. The catalog is separate from `ui/src/i18n/locales/*.json`, so it does not change the i18next key parity checks.
+diff --git a/ui/src/components/ActivityRow.tsx b/ui/src/components/ActivityRow.tsx
+index f3d6ba55e..85f3bd2d0 100644
+--- a/ui/src/components/ActivityRow.tsx
++++ b/ui/src/components/ActivityRow.tsx
+@@ -6,6 +6,7 @@ import { IssueReferenceActivitySummary } from "./IssueReferenceActivitySummary";
+ import { timeAgo } from "../lib/timeAgo";
+ import { cn } from "../lib/utils";
+ import { formatActivityVerb } from "../lib/activity-format";
++import { displayText } from "@/i18n/display-text";
+ import { deriveProjectUrlKey, type ActivityEvent, type Agent } from "@paperclipai/shared";
+ import type { CompanyUserProfile } from "../lib/company-members";
+ import { useState, type ReactNode } from "react";
+@@ -77,7 +78,7 @@ export function ActivityRow({ event, agentMap, userProfileMap, entityNameMap, en
+         <div className="flex min-w-0 flex-1 flex-col gap-1 @xl:contents">
+           <div className="flex min-w-0 items-baseline gap-2 @xl:contents">
+             <p className="flex h-6 min-w-0 flex-1 items-center gap-1.5">
+-              <span className="max-w-1/2 shrink-0 truncate" title={`${actorName} ${verb}`}>
++              <span className="max-w-1/2 shrink-0 truncate" title={`${actorName} ${displayText(verb)}`}>
+                 <span>{actorName}</span>{" "}
+                 <span className="text-muted-foreground">{verb}</span>
+               </span>
+diff --git a/ui/src/components/DisplayLanguageSelect.test.tsx b/ui/src/components/DisplayLanguageSelect.test.tsx
+new file mode 100644
+index 000000000..c600c0943
+--- /dev/null
++++ b/ui/src/components/DisplayLanguageSelect.test.tsx
+@@ -0,0 +1,45 @@
++// @vitest-environment jsdom
++
++import { act } from "react";
++import { createRoot } from "react-dom/client";
++import { afterEach, describe, expect, it, vi } from "vitest";
++import { DISPLAY_LOCALE_STORAGE_KEY } from "@/i18n/display-text";
++import { DisplayLanguageSelect } from "./DisplayLanguageSelect";
++
++(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
++
++describe("DisplayLanguageSelect", () => {
++  afterEach(() => {
++    document.body.innerHTML = "";
++    localStorage.removeItem(DISPLAY_LOCALE_STORAGE_KEY);
++  });
++
++  it("lists the display languages by their own names and stores the choice", async () => {
++    const container = document.createElement("div");
++    document.body.appendChild(container);
++    const onLocaleChange = vi.fn();
++    const root = createRoot(container);
++    await act(async () => {
++      root.render(<DisplayLanguageSelect onLocaleChange={onLocaleChange} />);
++    });
++
++    const select = container.querySelector("select");
++    expect(container.querySelector("label")?.textContent).toContain("Language");
++    expect(select?.value).toBe("en");
++    expect(select?.hasAttribute("data-no-translate")).toBe(true);
++    expect(Array.from(select?.options ?? [], (option) => [option.value, option.textContent])).toEqual([
++      ["en", "English"],
++      ["fr", "Français"],
++    ]);
++
++    await act(async () => {
++      if (!select) return;
++      select.value = "fr";
++      select.dispatchEvent(new Event("change", { bubbles: true }));
++    });
++
++    expect(localStorage.getItem(DISPLAY_LOCALE_STORAGE_KEY)).toBe("fr");
++    expect(onLocaleChange).toHaveBeenCalledWith("fr");
++    await act(async () => root.unmount());
++  });
++});
+diff --git a/ui/src/components/DisplayLanguageSelect.tsx b/ui/src/components/DisplayLanguageSelect.tsx
+new file mode 100644
+index 000000000..f5865e857
+--- /dev/null
++++ b/ui/src/components/DisplayLanguageSelect.tsx
+@@ -0,0 +1,55 @@
++import { Languages } from "lucide-react";
++
++import { cn } from "@/lib/utils";
++import {
++  DISPLAY_LOCALES,
++  getDisplayLocale,
++  setDisplayLocale,
++  type DisplayLocale,
++} from "@/i18n/display-text";
++
++const LANGUAGE_NAMES: Record<DisplayLocale, string> = {
++  en: "English",
++  fr: "Français",
++};
++
++function isDisplayLocale(value: string): value is DisplayLocale {
++  return (DISPLAY_LOCALES as readonly string[]).includes(value);
++}
++
++interface DisplayLanguageSelectProps {
++  className?: string;
++  onLocaleChange?: (locale: DisplayLocale) => void;
++}
++
++function reloadPage() {
++  window.location.reload();
++}
++
++export function DisplayLanguageSelect({ className, onLocaleChange = reloadPage }: DisplayLanguageSelectProps) {
++  return (
++    <label className={cn("flex items-center gap-2 text-sm text-muted-foreground", className)}>
++      <span className="flex size-5 shrink-0 items-center justify-center">
++        <Languages className="size-4" aria-hidden />
++      </span>
++      <span className="min-w-0 flex-1 truncate">Language</span>
++      <select
++        data-no-translate
++        defaultValue={getDisplayLocale()}
++        onChange={(event) => {
++          const locale = event.target.value;
++          if (!isDisplayLocale(locale)) return;
++          setDisplayLocale(locale);
++          onLocaleChange(locale);
++        }}
++        className="rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground"
++      >
++        {DISPLAY_LOCALES.map((locale) => (
++          <option key={locale} value={locale} lang={locale}>
++            {LANGUAGE_NAMES[locale]}
++          </option>
++        ))}
++      </select>
++    </label>
++  );
++}
+diff --git a/ui/src/components/InteractionGovernancePanel.tsx b/ui/src/components/InteractionGovernancePanel.tsx
+index 6bbf6b4f0..95d81fb49 100644
+--- a/ui/src/components/InteractionGovernancePanel.tsx
++++ b/ui/src/components/InteractionGovernancePanel.tsx
+@@ -15,6 +15,7 @@ import {
+   SelectValue,
+ } from "@/components/ui/select";
+ import { resolverPolicyLabel } from "../lib/interaction-audience";
++import { displayText } from "@/i18n/display-text";
+ 
+ const INTERACTION_KIND_LABELS: Record<IssueThreadInteractionKind, string> = {
+   suggest_tasks: "Suggested tasks",
+@@ -272,7 +273,7 @@ export function InteractionGovernancePanel({
+           </div>
+           {ISSUE_THREAD_INTERACTION_KINDS.map((kind) => {
+             const entry = governance[kind] ?? {};
+-            const kindLabel = INTERACTION_KIND_LABELS[kind];
++            const kindLabel = displayText(INTERACTION_KIND_LABELS[kind]);
+             return (
+               <Fragment key={kind}>
+                 <div className="text-sm font-medium sm:font-normal">{kindLabel}</div>
+diff --git a/ui/src/components/SidebarAccountMenu.production.tsx b/ui/src/components/SidebarAccountMenu.production.tsx
+index c085b6211..c292c03c4 100644
+--- a/ui/src/components/SidebarAccountMenu.production.tsx
++++ b/ui/src/components/SidebarAccountMenu.production.tsx
+@@ -24,6 +24,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
+ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+ import { cn, SIDEBAR_RAIL_HIDDEN_LABEL } from "../lib/utils";
+ import { ThemeToggle } from "./ThemeToggle";
++import { DisplayLanguageSelect } from "./DisplayLanguageSelect";
+ import { SidebarServerInfo } from "./SidebarServerInfo";
+ 
+ const INVITES_PATH = "/company/settings/members?tab=invites";
+@@ -248,6 +249,7 @@ export function SidebarAccountMenu({
+                 external
+                 onClick={() => setOpen(false)}
+               />
++              <DisplayLanguageSelect className="gap-3 px-3 py-3 font-medium text-foreground" />
+               <ThemeToggle variant="menu-action" onAfterToggle={() => setOpen(false)} />
+               {deploymentMode === "authenticated" ? (
+                 <button
+diff --git a/ui/src/components/SidebarAccountMenu.tsx b/ui/src/components/SidebarAccountMenu.tsx
+index f1592b394..9ec2eddab 100644
+--- a/ui/src/components/SidebarAccountMenu.tsx
++++ b/ui/src/components/SidebarAccountMenu.tsx
+@@ -26,6 +26,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
+ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+ import { cn, SIDEBAR_RAIL_HIDDEN_LABEL } from "../lib/utils";
+ import { ThemeToggle } from "./ThemeToggle";
++import { DisplayLanguageSelect } from "./DisplayLanguageSelect";
+ import { SidebarServerInfo } from "./SidebarServerInfo";
+ import { TruncatedText } from "./TruncatedText";
+ 
+@@ -258,6 +259,7 @@ export function SidebarAccountMenu({
+                 external
+                 onClick={() => setOpen(false)}
+               />
++              <DisplayLanguageSelect className="h-(--profile-popover-row-height) gap-(--profile-popover-row-gap) px-2.5 text-(length:--text-compact) font-medium text-foreground" />
+               <ThemeToggle variant="compact-menu-action" onAfterToggle={() => setOpen(false)} />
+               {deploymentMode === "authenticated" ? (
+                 <button
+diff --git a/ui/src/components/SidebarCompanyMenu.tsx b/ui/src/components/SidebarCompanyMenu.tsx
+index c1072143b..bbd1429dd 100644
+--- a/ui/src/components/SidebarCompanyMenu.tsx
++++ b/ui/src/components/SidebarCompanyMenu.tsx
+@@ -37,6 +37,7 @@ import { useCloudInstance } from "@/hooks/useCloudInstance";
+ import { useHiddenSettings } from "@/hooks/useHiddenSettings";
+ import { useCompanyOrder } from "@/hooks/useCompanyOrder";
+ import { useSignOut } from "@/hooks/useSignOut";
++import { displayText } from "@/i18n/display-text";
+ import { queryKeys } from "@/lib/queryKeys";
+ import { cn, SIDEBAR_RAIL_HIDDEN_LABEL } from "@/lib/utils";
+ import { useSidebar } from "../context/SidebarContext";
+@@ -197,7 +198,7 @@ function BuiltinCompanyMenu({ open: controlledOpen, onOpenChange, showChevron =
+     hiddenSettingsLoaded &&
+     !hidesCompanyPage(hiddenSettings, "company.members") &&
+     !hidesCompanyPage(hiddenSettings, "company.invites");
+-  const switcherNoun = "organization";
++  const switcherNoun = displayText("organization");
+   const currentName = selectedCompany?.name ?? null;
+   // Managed hosts forbid local company creation. Their extension owns that action.
+   const companyCreationManaged = Boolean(useCloudInstance());
+diff --git a/ui/src/components/StatusBadge.tsx b/ui/src/components/StatusBadge.tsx
+index 30a973f88..fd470f11e 100644
+--- a/ui/src/components/StatusBadge.tsx
++++ b/ui/src/components/StatusBadge.tsx
+@@ -10,6 +10,7 @@ import {
+   taskStatusVarDefault,
+ } from "../lib/status-colors";
+ import { StatusGlyph } from "./StatusGlyph";
++import { displayText } from "@/i18n/display-text";
+ 
+ /** Inline `--sc` local var pointing a status helper at a base-hue CSS var. */
+ function scStyle(cssVar: string): CSSProperties {
+@@ -19,7 +20,7 @@ function scStyle(cssVar: string): CSSProperties {
+ /** "in_review" → "In review" (sentence case). */
+ function sentenceCaseStatus(status: string): string {
+   const s = status.replace(/_/g, " ");
+-  return s.charAt(0).toUpperCase() + s.slice(1);
++  return displayText(s.charAt(0).toUpperCase() + s.slice(1));
+ }
+ 
+ /**
+@@ -36,7 +37,7 @@ export function StatusBadge({ status, label, className }: { status: string; labe
+         className
+       )}
+     >
+-      {label ?? status.replace(/[_-]/g, " ")}
++      {label ?? displayText(status.replace(/[_-]/g, " "))}
+     </span>
+   );
+ }
+@@ -54,7 +55,7 @@ export function AgentStatusBadge({ status }: { status: string }) {
+       className="status-chip inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium leading-none whitespace-nowrap shrink-0"
+       style={scStyle(cssVar)}
+     >
+-      {label.replace(/_/g, " ")}
++      {displayText(label.replace(/_/g, " "))}
+     </span>
+   );
+ }
+diff --git a/ui/src/components/task-chat/TaskChatComposer.tsx b/ui/src/components/task-chat/TaskChatComposer.tsx
+index 8d162be06..38d172f5f 100644
+--- a/ui/src/components/task-chat/TaskChatComposer.tsx
++++ b/ui/src/components/task-chat/TaskChatComposer.tsx
+@@ -67,6 +67,7 @@ import { TaskChatComposerBar } from "./TaskChatComposerBar";
+ import { ComposerAddMenu, ComposerModeChip, ComposerPrivacyChip } from "./ComposerAddMenu";
+ import type { ComposerRunSettings } from "./composer-run-settings";
+ import type { Agent, IssueAssigneeAdapterOverrides } from "@paperclipai/shared";
++import { displayText } from "@/i18n/display-text";
+ 
+ /** Structurally identical to IssueChatThread's module-private CommentReassignment. */
+ export interface CommentReassignment {
+@@ -300,18 +301,19 @@ function AssigneeIdentityAvatar({
+ 
+ /** v7 per-mode placeholder copy; `{agent}` is the pending assignee's name. */
+ function modePlaceholder(mode: IssueWorkMode, agentName: string, mobile: boolean): string {
++  const values = { v0: agentName };
+   if (mobile) {
+-    if (mode === "planning") return `Plan with ${agentName}…`;
+-    if (mode === "ask") return `Ask ${agentName}…`;
+-    return `Message ${agentName}…`;
++    if (mode === "planning") return displayText("Plan with {{v0}}…", values);
++    if (mode === "ask") return displayText("Ask {{v0}}…", values);
++    return displayText("Message {{v0}}…", values);
+   }
+   switch (mode) {
+     case "planning":
+-      return `Plan with ${agentName} — shapes the plan doc, no code changes…`;
++      return displayText("Plan with {{v0}} — shapes the plan doc, no code changes…", values);
+     case "ask":
+-      return `Ask ${agentName} a question — read-only, nothing runs…`;
++      return displayText("Ask {{v0}} a question — read-only, nothing runs…", values);
+     default:
+-      return `Message ${agentName} — describe what you want done…`;
++      return displayText("Message {{v0}} — describe what you want done…", values);
+   }
+ }
+ 
+@@ -644,7 +646,7 @@ export function TaskChatComposer({
+   const assigneeLabel =
+     reassignOptions?.find((o) => o.id === assigneeValue)?.label ?? "Unassigned";
+   const assigneeName =
+-    assigneeLabel === "Unassigned" ? "the agent" : assigneeLabel;
++    assigneeLabel === "Unassigned" ? displayText("the agent") : assigneeLabel;
+   const effectivePlaceholder = queuedEdit
+     ? "Edit queued message…"
+     : (placeholder ?? modePlaceholder(pendingMode, assigneeName, mobile));
+diff --git a/ui/src/i18n/display-catalog.test.ts b/ui/src/i18n/display-catalog.test.ts
+new file mode 100644
+index 000000000..f85e2bea7
+--- /dev/null
++++ b/ui/src/i18n/display-catalog.test.ts
+@@ -0,0 +1,42 @@
++import { describe, expect, it } from "vitest";
++
++const catalogs = import.meta.glob<Record<string, unknown>>("./display/*.json", { eager: true, import: "default" });
++
++function placeholders(text: string) {
++  return Array.from(text.matchAll(/\{\{[^{}]+\}\}/g), (match) => match[0]).sort();
++}
++
++function urls(text: string) {
++  return Array.from(text.matchAll(/\bhttps?:\/\/[^\s<>"')]+/gi), (match) => match[0]).sort();
++}
++
++function hasHtmlTag(text: string) {
++  return /<\/?[A-Za-z][A-Za-z0-9:-]*(?:\s[^>]*)?>/.test(text);
++}
++
++describe("display catalogs", () => {
++  it("ships at least one catalog", () => {
++    expect(Object.keys(catalogs).length).toBeGreaterThan(0);
++  });
++
++  for (const [path, catalog] of Object.entries(catalogs)) {
++    it(`${path} only holds safe string translations keyed by normalized source text`, () => {
++      const errors: string[] = [];
++      for (const [source, translated] of Object.entries(catalog)) {
++        if (typeof translated !== "string" || translated.trim() === "") {
++          errors.push(`${source}: translation must be a non-empty string`);
++          continue;
++        }
++        if (source !== source.replace(/\s+/g, " ").trim()) errors.push(`${source}: key is not normalized`);
++        if (placeholders(source).join("|") !== placeholders(translated).join("|")) errors.push(`${source}: placeholders differ`);
++        if (hasHtmlTag(translated) && !hasHtmlTag(source)) errors.push(`${source}: adds an HTML tag`);
++        const sourceUrls = new Set(urls(source));
++        if (urls(translated).some((url) => !sourceUrls.has(url))) errors.push(`${source}: adds a URL`);
++        if (/javascript\s*:/i.test(translated) && !/javascript\s*:/i.test(source)) errors.push(`${source}: adds javascript:`);
++        const limit = Math.min(2_000, Math.max(source.length * 4 + 64, source.length + 128));
++        if (translated.length > limit) errors.push(`${source}: translation is too long`);
++      }
++      expect(errors).toEqual([]);
++    });
++  }
++});
+diff --git a/ui/src/i18n/display-dom.test.ts b/ui/src/i18n/display-dom.test.ts
+new file mode 100644
+index 000000000..fa9438a1b
+--- /dev/null
++++ b/ui/src/i18n/display-dom.test.ts
+@@ -0,0 +1,111 @@
++// @vitest-environment jsdom
++
++import { describe, expect, it } from "vitest";
++import { createDomTranslator, installDisplayDateLocale, startDomTranslation } from "./display-dom";
++
++const catalog = {
++  Mine: "À moi",
++  "Month to Date": "Mois en cours",
++  "updated {{v0}} ago": "mis à jour il y a {{v0}}",
++  "{{v0}} running, {{v1}} paused": "{{v0}} en cours, {{v1}} en pause",
++  "Search agents": "Rechercher des agents",
++  "New Agent": "Nouvel agent",
++  "{{v0}} agent": "agent {{v0}}",
++  "{{v0}} tasks": "{{v0}} tâches",
++  "{{v0}} task": "{{v0}} tâche",
++};
++
++const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
++
++describe("createDomTranslator", () => {
++  it("translates exact labels and rich templates", () => {
++    const translate = createDomTranslator(catalog);
++    expect(translate("  Mine ")).toBe("  À moi ");
++    expect(translate("updated 5 min ago")).toBe("mis à jour il y a 5 min");
++    expect(translate("3 running, 1 paused")).toBe("3 en cours, 1 en pause");
++  });
++
++  it("does not touch translated output, poor templates or free text", () => {
++    const translate = createDomTranslator(catalog);
++    expect(translate("Nouvel agent")).toBeNull();
++    expect(translate("Research agent")).toBeNull();
++    expect(translate("Prepare the client demo")).toBeNull();
++  });
++
++  it("translates counted nouns only through catalog entries", () => {
++    const translate = createDomTranslator(catalog);
++    expect(translate("3 tasks")).toBe("3 tâches");
++    expect(translate("1 task")).toBe("1 tâche");
++    expect(translate("2 Zenith")).toBeNull();
++  });
++});
++
++describe("startDomTranslation", () => {
++  it("never touches editors, code, inputs or opted-out zones", () => {
++    document.body.innerHTML = `
++      <nav><button title="Search agents">Mine</button></nav>
++      <pre>Mine</pre><code>Mine</code><textarea>Mine</textarea>
++      <div contenteditable="true">Mine</div><div data-no-translate>Mine</div>
++      <div class="ProseMirror"><p>Mine</p></div><input value="Mine" placeholder="Search agents">
++      <select><option>Mine</option></select>`;
++    const stop = startDomTranslation(document.body, createDomTranslator(catalog));
++    expect(document.querySelector("nav button")?.textContent).toBe("À moi");
++    expect(document.querySelector("nav button")?.getAttribute("title")).toBe("Rechercher des agents");
++    for (const selector of ["pre", "code", "textarea", "[contenteditable]", "[data-no-translate]", ".ProseMirror p", "option"]) {
++      expect(document.querySelector(selector)?.textContent).toBe("Mine");
++    }
++    expect(document.querySelector("input")?.value).toBe("Mine");
++    expect(document.querySelector("input")?.getAttribute("placeholder")).toBe("Rechercher des agents");
++    stop();
++  });
++
++  it("keeps attributes inside markdown, editors and opted-out zones as written", async () => {
++    document.body.innerHTML = `
++      <div class="paperclip-markdown"><img alt="New Agent" src="data:,"></div>
++      <div data-no-translate><button title="Search agents" aria-label="New Agent">x</button></div>
++      <div class="ProseMirror"><input placeholder="Search agents"></div>
++      <form><textarea placeholder="Search agents"></textarea></form>`;
++    const stop = startDomTranslation(document.body, createDomTranslator(catalog));
++    expect(document.querySelector("img")?.getAttribute("alt")).toBe("New Agent");
++    expect(document.querySelector("[data-no-translate] button")?.getAttribute("title")).toBe("Search agents");
++    expect(document.querySelector("[data-no-translate] button")?.getAttribute("aria-label")).toBe("New Agent");
++    expect(document.querySelector(".ProseMirror input")?.getAttribute("placeholder")).toBe("Search agents");
++    expect(document.querySelector("form textarea")?.getAttribute("placeholder")).toBe("Rechercher des agents");
++    const later = document.createElement("img");
++    later.setAttribute("alt", "New Agent");
++    document.querySelector(".paperclip-markdown")?.append(later);
++    await tick();
++    expect(later.getAttribute("alt")).toBe("New Agent");
++    stop();
++  });
++
++  it("follows later text updates and insertions", async () => {
++    document.body.innerHTML = '<span id="label">Mine</span>';
++    const stop = startDomTranslation(document.body, createDomTranslator(catalog));
++    const label = document.getElementById("label");
++    const text = label?.firstChild;
++    if (text) text.nodeValue = "Month to Date";
++    await tick();
++    expect(label?.textContent).toBe("Mois en cours");
++    const paragraph = document.createElement("p");
++    paragraph.textContent = "2 running, 0 paused";
++    document.body.append(paragraph);
++    await tick();
++    expect(paragraph.textContent).toBe("2 en cours, 0 en pause");
++    stop();
++  });
++});
++
++describe("installDisplayDateLocale", () => {
++  it("formats forced en-US dates in the display locale but keeps parts and resolved options", () => {
++    installDisplayDateLocale(globalThis, "fr");
++    const date = new Date("2026-10-29T12:00:00Z");
++    expect(date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })).toBe("29 oct. 2026");
++    expect(new Intl.DateTimeFormat("en-US", { month: "long", timeZone: "UTC" }).format(date)).toBe("octobre");
++    const parts = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" }).formatToParts(date);
++    expect(parts.find((part) => part.type === "weekday")?.value).toBe("Thu");
++    expect(new Intl.DateTimeFormat("en-US", { timeZone: "UTC" }).resolvedOptions().locale).toBe("en-US");
++    expect(new Intl.DateTimeFormat("en-US") instanceof Intl.DateTimeFormat).toBe(true);
++    expect(date.toLocaleDateString("de-DE", { timeZone: "UTC" })).toBe("29.10.2026");
++  });
++});
+diff --git a/ui/src/i18n/display-dom.ts b/ui/src/i18n/display-dom.ts
+new file mode 100644
+index 000000000..b9edf2b38
+--- /dev/null
++++ b/ui/src/i18n/display-dom.ts
+@@ -0,0 +1,229 @@
++export type DisplayCatalog = Record<string, string>;
++export type DomTextTranslator = (raw: string) => string | null;
++
++const SKIP_SELECTOR = [
++  "code",
++  "pre",
++  "script",
++  "style",
++  "textarea",
++  "input",
++  "kbd",
++  "samp",
++  "[contenteditable=\"\"]",
++  "[contenteditable=\"true\"]",
++  "[data-no-translate]",
++  ".ProseMirror",
++  "[data-lexical-editor]",
++  ".mdxeditor",
++  ".cm-editor",
++  ".monaco-editor",
++  ".prose",
++  ".paperclip-markdown",
++  "[data-markdown]",
++].join(",");
++
++const DISPLAY_ATTRIBUTES = ["title", "aria-label", "placeholder", "alt"];
++const COUNTED_NOUN = /^(\d[\d\s.,]*)\s+([A-Za-z]+)$/;
++const MAX_TEMPLATE_INPUT = 240;
++const MAX_CACHE_SIZE = 20_000;
++
++interface TemplateMatcher {
++  pattern: RegExp;
++  keys: string[];
++  translation: string;
++  anchor: string;
++}
++
++function hasOwn(catalog: DisplayCatalog, key: string): boolean {
++  return Object.prototype.hasOwnProperty.call(catalog, key);
++}
++
++function escapeRegExp(text: string): string {
++  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
++}
++
++function fillPlaceholders(template: string, values: Record<string, string>): string {
++  return template.replace(/\{\{(v\d+)\}\}/g, (token, key: string) => values[key] ?? token);
++}
++
++export function buildTemplateMatchers(catalog: DisplayCatalog): TemplateMatcher[] {
++  const matchers: TemplateMatcher[] = [];
++  for (const [source, translation] of Object.entries(catalog)) {
++    if (!source.includes("{{v")) continue;
++    const parts = source.split(/(\{\{v\d+\}\})/);
++    const fixedParts = parts.filter((_, index) => index % 2 === 0);
++    const anchor = fixedParts.reduce((longest, part) => (part.trim().length > longest.length ? part.trim() : longest), "");
++    const fixedWords = fixedParts.join(" ").match(/[A-Za-z]{2,}/g) ?? [];
++    if (fixedWords.length < 2 || anchor.replace(/[^A-Za-z]/g, "").length < 4) continue;
++    const keys = parts.filter((_, index) => index % 2 === 1).map((part) => part.slice(2, -2));
++    const pattern = new RegExp(`^${parts.map((part, index) => (index % 2 === 1 ? "(.+?)" : escapeRegExp(part))).join("")}$`, "s");
++    matchers.push({ pattern, keys, translation, anchor });
++  }
++  return matchers.sort((left, right) => right.anchor.length - left.anchor.length);
++}
++
++export function createDomTranslator(catalog: DisplayCatalog): DomTextTranslator {
++  const templates = buildTemplateMatchers(catalog);
++  const translatedOutputs = new Set(Object.values(catalog).map((value) => value.replace(/\s+/g, " ").trim()));
++  const cache = new Map<string, string | null>();
++
++  const lookup = (text: string): string | null => {
++    if (hasOwn(catalog, text)) return catalog[text];
++    const counted = COUNTED_NOUN.exec(text);
++    if (counted) {
++      const key = `{{v0}} ${counted[2]}`;
++      if (hasOwn(catalog, key)) return fillPlaceholders(catalog[key], { v0: counted[1] });
++    }
++    if (text.length >= MAX_TEMPLATE_INPUT) return null;
++    for (const template of templates) {
++      if (!text.includes(template.anchor)) continue;
++      const match = template.pattern.exec(text);
++      if (!match) continue;
++      const values = Object.fromEntries(template.keys.map((key, index) => [key, match[index + 1]]));
++      return fillPlaceholders(template.translation, values);
++    }
++    return null;
++  };
++
++  return (raw: string) => {
++    const text = raw.replace(/\s+/g, " ").trim();
++    if (text.length < 2 || !/[A-Za-z]{2}/.test(text)) return null;
++    if (translatedOutputs.has(text) && !hasOwn(catalog, text)) return null;
++    let translated = cache.get(text);
++    if (translated === undefined) {
++      translated = lookup(text);
++      if (cache.size > MAX_CACHE_SIZE) cache.clear();
++      cache.set(text, translated);
++    }
++    if (translated === null || translated === text) return null;
++    return (raw.match(/^\s*/)?.[0] ?? "") + translated + (raw.match(/\s*$/)?.[0] ?? "");
++  };
++}
++
++export function startDomTranslation(root: Node, translate: DomTextTranslator): () => void {
++  const owned = new WeakMap<Node, string>();
++  const isSkipped = (element: Element | null) => !element || Boolean(element.closest(SKIP_SELECTOR));
++
++  const translateTextNode = (node: Node) => {
++    const parent = node.parentElement;
++    if (isSkipped(parent)) return;
++    if (parent?.tagName === "OPTION" && !parent.hasAttribute("value")) return;
++    const value = node.nodeValue;
++    if (value === null || owned.get(node) === value) return;
++    const translated = translate(value);
++    if (translated !== null && translated !== value) {
++      node.nodeValue = translated;
++      owned.set(node, translated);
++    }
++  };
++
++  const isAttributeSkipped = (element: Element) => {
++    const formField = element.tagName === "INPUT" || element.tagName === "TEXTAREA";
++    return isSkipped(formField ? element.parentElement ?? element.ownerDocument.documentElement : element);
++  };
++
++  const translateAttributes = (element: Element) => {
++    if (isAttributeSkipped(element)) return;
++    for (const attribute of DISPLAY_ATTRIBUTES) {
++      const value = element.getAttribute(attribute);
++      if (!value) continue;
++      const marker = `data-display-${attribute}`;
++      if (element.getAttribute(marker) === value) continue;
++      const translated = translate(value);
++      if (translated !== null && translated !== value) {
++        element.setAttribute(attribute, translated);
++        element.setAttribute(marker, translated);
++      }
++    }
++  };
++
++  const walk = (node: Node) => {
++    if (node.nodeType === Node.TEXT_NODE) {
++      translateTextNode(node);
++      return;
++    }
++    if (node.nodeType !== Node.ELEMENT_NODE && node.nodeType !== Node.DOCUMENT_FRAGMENT_NODE) return;
++    if (node.nodeType === Node.ELEMENT_NODE) {
++      translateAttributes(node as Element);
++      if (isSkipped(node as Element)) return;
++    }
++    const document = node.ownerDocument ?? (node as Document);
++    const walker = document.createTreeWalker(node, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
++    for (let current = walker.nextNode(); current; current = walker.nextNode()) {
++      if (current.nodeType === Node.TEXT_NODE) translateTextNode(current);
++      else translateAttributes(current as Element);
++    }
++  };
++
++  walk(root);
++  const view = (root.ownerDocument ?? (root as Document)).defaultView;
++  if (!view) return () => {};
++  const observer = new view.MutationObserver((records) => {
++    for (const record of records) {
++      if (record.type === "characterData") translateTextNode(record.target);
++      else if (record.type === "attributes") translateAttributes(record.target as Element);
++      else record.addedNodes.forEach(walk);
++    }
++  });
++  observer.observe(root, {
++    subtree: true,
++    childList: true,
++    characterData: true,
++    attributes: true,
++    attributeFilter: DISPLAY_ATTRIBUTES,
++  });
++  return () => observer.disconnect();
++}
++
++type DateLocaleMethod = "toLocaleDateString" | "toLocaleTimeString" | "toLocaleString";
++type PatchedFunction = { __paperclipDisplayLocale?: string };
++
++export function installDisplayDateLocale(target: typeof globalThis, locale: string): void {
++  const swap = (requested: unknown) =>
++    requested === undefined || (typeof requested === "string" && /^en(-US)?$/i.test(requested)) ? locale : requested;
++
++  const prototype = target.Date.prototype;
++  for (const name of ["toLocaleDateString", "toLocaleTimeString", "toLocaleString"] as DateLocaleMethod[]) {
++    const original = prototype[name] as ((this: Date, locales?: unknown, options?: unknown) => string) & PatchedFunction;
++    if (original.__paperclipDisplayLocale) continue;
++    const patched = function (this: Date, locales?: unknown, options?: unknown) {
++      return original.call(this, swap(locales), options);
++    } as typeof original;
++    patched.__paperclipDisplayLocale = locale;
++    prototype[name] = patched as Date[DateLocaleMethod];
++  }
++
++  const OriginalDateTimeFormat = target.Intl.DateTimeFormat as typeof Intl.DateTimeFormat & PatchedFunction;
++  if (!OriginalDateTimeFormat.__paperclipDisplayLocale) {
++    const PatchedDateTimeFormat = function (locales?: string | string[], options?: Intl.DateTimeFormatOptions) {
++      const instance = new OriginalDateTimeFormat(locales, options);
++      const displayLocale = swap(locales);
++      if (displayLocale !== locales) {
++        const display = new OriginalDateTimeFormat(displayLocale as string, options);
++        Object.defineProperty(instance, "format", { value: display.format, configurable: true });
++        Object.defineProperty(instance, "formatRange", { value: display.formatRange.bind(display), configurable: true });
++      }
++      return instance;
++    } as unknown as typeof Intl.DateTimeFormat & PatchedFunction;
++    Object.defineProperty(PatchedDateTimeFormat, "prototype", { value: OriginalDateTimeFormat.prototype });
++    Object.defineProperty(PatchedDateTimeFormat, "supportedLocalesOf", {
++      value: OriginalDateTimeFormat.supportedLocalesOf.bind(OriginalDateTimeFormat),
++    });
++    PatchedDateTimeFormat.__paperclipDisplayLocale = locale;
++    Object.defineProperty(target.Intl, "DateTimeFormat", { value: PatchedDateTimeFormat, configurable: true, writable: true });
++  }
++
++  const OriginalRelativeTimeFormat = target.Intl.RelativeTimeFormat as typeof Intl.RelativeTimeFormat & PatchedFunction;
++  if (!OriginalRelativeTimeFormat.__paperclipDisplayLocale) {
++    const PatchedRelativeTimeFormat = function (locales?: string | string[], options?: Intl.RelativeTimeFormatOptions) {
++      return new OriginalRelativeTimeFormat(swap(locales) as string | string[] | undefined, options);
++    } as unknown as typeof Intl.RelativeTimeFormat & PatchedFunction;
++    Object.defineProperty(PatchedRelativeTimeFormat, "prototype", { value: OriginalRelativeTimeFormat.prototype });
++    Object.defineProperty(PatchedRelativeTimeFormat, "supportedLocalesOf", {
++      value: OriginalRelativeTimeFormat.supportedLocalesOf.bind(OriginalRelativeTimeFormat),
++    });
++    PatchedRelativeTimeFormat.__paperclipDisplayLocale = locale;
++    Object.defineProperty(target.Intl, "RelativeTimeFormat", { value: PatchedRelativeTimeFormat, configurable: true, writable: true });
++  }
++}
+diff --git a/ui/src/i18n/display-language.test.tsx b/ui/src/i18n/display-language.test.tsx
+new file mode 100644
+index 000000000..7b8764618
+--- /dev/null
++++ b/ui/src/i18n/display-language.test.tsx
+@@ -0,0 +1,51 @@
++// @vitest-environment jsdom
++
++import { renderToStaticMarkup } from "react-dom/server";
++import { afterAll, describe, expect, it, vi } from "vitest";
++import { IssueStatusBadge } from "../components/StatusBadge";
++import { getStatusIconLabel } from "../components/StatusIcon";
++import { formatStoppedAge } from "../lib/blockedInbox";
++import { relativeTime } from "../lib/utils";
++import { timeAgo } from "../lib/timeAgo";
++import { DISPLAY_LOCALE_STORAGE_KEY, displayText, getDisplayLocale, initDisplayLanguage } from "./display-text";
++import { i18n } from "./index";
++
++describe("initDisplayLanguage with a saved French choice", () => {
++  afterAll(async () => {
++    vi.restoreAllMocks();
++    localStorage.removeItem(DISPLAY_LOCALE_STORAGE_KEY);
++    await i18n.changeLanguage("en");
++  });
++
++  it("loads the French catalog and translates computed labels", async () => {
++    localStorage.setItem(DISPLAY_LOCALE_STORAGE_KEY, "fr");
++    await expect(initDisplayLanguage()).resolves.toBe("fr");
++    expect(getDisplayLocale()).toBe("fr");
++    expect(i18n.language).toBe("fr");
++    expect(document.documentElement.lang).toBe("fr");
++    expect(displayText("Password")).toBe("Mot de passe");
++    expect(displayText("Plan with {{v0}}…", { v0: "Ada" })).toBe("Planifier avec Ada…");
++    expect(renderToStaticMarkup(<IssueStatusBadge status="in_progress" />)).toContain("En cours");
++    vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-29T12:00:00Z"));
++    expect(timeAgo("2026-10-29T11:58:00Z")).toBe("il y a 2 min");
++    expect(formatStoppedAge("2026-10-29T11:30:00Z")).toBe("arrêté depuis 30 min");
++    expect(relativeTime("2026-10-29T11:55:00Z")).toBe("il y a 5 min");
++    expect(displayText("{{v0}} {{v1}}", { v0: "Enable", v1: "agentmail" })).toBe("Activer agentmail");
++    expect(formatStoppedAge("2026-10-27T12:00:00Z")).toBe("arrêté depuis 2 j");
++    const attention = {
++      state: "needs_attention",
++      reason: "attention_required",
++      unresolvedBlockerCount: 2,
++      coveredBlockerCount: 0,
++      stalledBlockerCount: 0,
++      attentionBlockerCount: 2,
++      sampleBlockerIdentifier: null,
++      sampleStalledBlockerIdentifier: null,
++    } as const;
++    expect(getStatusIconLabel("blocked", null, attention)).toBe("Bloqué · 2 blocages nécessitent une intervention");
++    expect(getStatusIconLabel("blocked", null, { ...attention, coveredBlockerCount: 1 })).toBe(
++      "Bloqué · 2 blocages nécessitent une intervention ; 1 couvert(s) par un travail en cours",
++    );
++    expect(getStatusIconLabel("blocked")).toBe("Bloqué");
++  });
++});
+diff --git a/ui/src/i18n/display-text.test.ts b/ui/src/i18n/display-text.test.ts
+new file mode 100644
+index 000000000..9a6959562
+--- /dev/null
++++ b/ui/src/i18n/display-text.test.ts
+@@ -0,0 +1,62 @@
++import { describe, expect, it } from "vitest";
++import { createDisplayTranslator, displayText, getDisplayLocale, resolveDisplayLocale } from "./display-text";
++
++describe("createDisplayTranslator", () => {
++  const translate = createDisplayTranslator({
++    "New Agent": "Nouvel agent",
++    "Found {{v0}} agents": "{{v0}} agents trouvés",
++    "Broken {{v0}} marker": "Marqueur cassé",
++  });
++
++  it("translates known text and keeps surrounding whitespace", () => {
++    expect(translate("New Agent")).toBe("Nouvel agent");
++    expect(translate(" New Agent ")).toBe(" Nouvel agent ");
++    expect(translate("Unlisted text")).toBe("Unlisted text");
++  });
++
++  it("interpolates values without translating them", () => {
++    expect(translate("Found {{v0}} agents", { v0: "<b>New Agent</b>" })).toBe("<b>New Agent</b> agents trouvés");
++    expect(translate("Found {{v0}} agents", { v0: "Ada" })).toBe("Ada agents trouvés");
++    expect(translate("Found {{v0}} agents", { v0: 3 })).toBe("3 agents trouvés");
++  });
++
++  it("shows a value that is itself a short catalog label in the display language", () => {
++    expect(translate("Found {{v0}} agents", { v0: "New Agent" })).toBe("Nouvel agent agents trouvés");
++    expect(translate("{{v0}} {{v1}}", { v0: "New Agent", v1: "Box" })).toBe("Nouvel agent Box");
++    expect(translate("Found {{v0}} agents", { v0: "Found {{v0}} agents" })).toBe("Found {{v0}} agents agents trouvés");
++    expect(translate("Found {{v0}} agents", { v0: `New Agent ${"x".repeat(60)}` })).toBe(`New Agent ${"x".repeat(60)} agents trouvés`);
++  });
++
++  it("falls back to the source text when a translation loses a placeholder", () => {
++    expect(translate("Broken {{v0}} marker", { v0: 2 })).toBe("Broken 2 marker");
++  });
++});
++
++describe("displayText before a display language is loaded", () => {
++  it("returns the English source unchanged", () => {
++    expect(getDisplayLocale()).toBe("en");
++    expect(displayText("New Agent")).toBe("New Agent");
++    expect(displayText(" Leading and trailing ")).toBe(" Leading and trailing ");
++    expect(displayText("{{v0}}m ago", { v0: 5 })).toBe("5m ago");
++  });
++});
++
++describe("resolveDisplayLocale", () => {
++  it("prefers a saved choice", () => {
++    expect(resolveDisplayLocale("en", ["fr-FR"])).toBe("en");
++    expect(resolveDisplayLocale("fr", ["en-US"])).toBe("fr");
++  });
++
++  it("follows the first supported browser language", () => {
++    expect(resolveDisplayLocale(null, ["fr-FR", "en-US"])).toBe("fr");
++    expect(resolveDisplayLocale(null, ["fr-CA"])).toBe("fr");
++    expect(resolveDisplayLocale(null, ["en-GB", "fr-FR"])).toBe("en");
++    expect(resolveDisplayLocale(null, ["de-DE", "fr"])).toBe("fr");
++  });
++
++  it("falls back to English", () => {
++    expect(resolveDisplayLocale(null, [])).toBe("en");
++    expect(resolveDisplayLocale("unknown", ["de-DE"])).toBe("en");
++    expect(resolveDisplayLocale(null, ["frisian"])).toBe("en");
++  });
++});
+diff --git a/ui/src/i18n/display-text.ts b/ui/src/i18n/display-text.ts
+new file mode 100644
+index 000000000..521ad4f06
+--- /dev/null
++++ b/ui/src/i18n/display-text.ts
+@@ -0,0 +1,125 @@
++import { i18n } from "./index";
++import { createDomTranslator, installDisplayDateLocale, startDomTranslation, type DisplayCatalog } from "./display-dom";
++
++export type { DisplayCatalog };
++
++export const DISPLAY_LOCALE_STORAGE_KEY = "paperclip:locale";
++export const DISPLAY_LOCALES = ["en", "fr"] as const;
++export type DisplayLocale = (typeof DISPLAY_LOCALES)[number];
++export type DisplayValues = Record<string, unknown>;
++export type DisplayTranslator = (text: string, values?: DisplayValues) => string;
++
++const catalogLoaders = import.meta.glob<DisplayCatalog>("./display/*.json", { import: "default" });
++
++let activeLocale: DisplayLocale = "en";
++let activeTranslator: DisplayTranslator | null = null;
++
++function placeholderSignature(text: string): string {
++  return Array.from(text.matchAll(/\{\{[^{}]+\}\}/g), (match) => match[0]).sort().join("\u0000");
++}
++
++const MAX_TRANSLATED_VALUE_LENGTH = 60;
++
++function interpolate(text: string, values: DisplayValues, catalog?: DisplayCatalog): string {
++  return text.replace(/\{\{(v\d+)\}\}/g, (token, key: string) => {
++    if (!Object.prototype.hasOwnProperty.call(values, key)) return token;
++    const value = values[key];
++    if (catalog && typeof value === "string") {
++      const label = normalizeDisplayText(value);
++      if (
++        label.length <= MAX_TRANSLATED_VALUE_LENGTH &&
++        Object.prototype.hasOwnProperty.call(catalog, label) &&
++        !catalog[label].includes("{{")
++      ) {
++        return catalog[label];
++      }
++    }
++    return String(value);
++  });
++}
++
++export function normalizeDisplayText(text: string): string {
++  return text.replace(/\s+/g, " ").trim();
++}
++
++export function createDisplayTranslator(catalog: DisplayCatalog): DisplayTranslator {
++  return (text, values) => {
++    let result = text;
++    const key = normalizeDisplayText(text);
++    if (Object.prototype.hasOwnProperty.call(catalog, key)) {
++      const translated = catalog[key];
++      if (placeholderSignature(translated) === placeholderSignature(key)) {
++        result = (text.match(/^\s*/)?.[0] ?? "") + translated + (text.match(/\s*$/)?.[0] ?? "");
++      }
++    }
++    return values ? interpolate(result, values, catalog) : result;
++  };
++}
++
++export function displayText(text: string, values?: DisplayValues): string {
++  if (activeTranslator) return activeTranslator(text, values);
++  return values ? interpolate(text, values) : text;
++}
++
++function matchDisplayLocale(value: string): DisplayLocale | null {
++  const normalized = value.trim().toLowerCase();
++  return DISPLAY_LOCALES.find((locale) => normalized === locale || normalized.startsWith(`${locale}-`)) ?? null;
++}
++
++export function resolveDisplayLocale(stored: string | null | undefined, preferred: readonly string[]): DisplayLocale {
++  const storedLocale = stored ? matchDisplayLocale(stored) : null;
++  if (storedLocale) return storedLocale;
++  for (const language of preferred) {
++    const locale = matchDisplayLocale(language);
++    if (locale) return locale;
++  }
++  return "en";
++}
++
++export function getDisplayLocale(): DisplayLocale {
++  return activeLocale;
++}
++
++export function readStoredDisplayLocale(): string | null {
++  try {
++    return globalThis.localStorage?.getItem(DISPLAY_LOCALE_STORAGE_KEY) ?? null;
++  } catch {
++    return null;
++  }
++}
++
++export function setDisplayLocale(locale: DisplayLocale): void {
++  try {
++    globalThis.localStorage?.setItem(DISPLAY_LOCALE_STORAGE_KEY, locale);
++  } catch {
++    return;
++  }
++}
++
++function preferredLanguages(): readonly string[] {
++  if (typeof navigator === "undefined") return [];
++  if (navigator.languages?.length) return navigator.languages;
++  return navigator.language ? [navigator.language] : [];
++}
++
++export async function initDisplayLanguage(): Promise<DisplayLocale> {
++  const locale = resolveDisplayLocale(readStoredDisplayLocale(), preferredLanguages());
++  if (locale === "en") return "en";
++  const load = catalogLoaders[`./display/${locale}.json`];
++  if (!load) return "en";
++  let catalog: DisplayCatalog;
++  try {
++    catalog = await load();
++  } catch {
++    return "en";
++  }
++  activeLocale = locale;
++  activeTranslator = createDisplayTranslator(catalog);
++  await i18n.changeLanguage(locale);
++  if (typeof document !== "undefined") {
++    document.documentElement.lang = locale;
++    installDisplayDateLocale(globalThis, locale);
++    startDomTranslation(document.body, createDomTranslator(catalog));
++  }
++  return locale;
++}
+diff --git a/ui/src/lib/blockedInbox.ts b/ui/src/lib/blockedInbox.ts
+index d14db461e..0c4b9ec4b 100644
+--- a/ui/src/lib/blockedInbox.ts
++++ b/ui/src/lib/blockedInbox.ts
+@@ -1,3 +1,4 @@
++import { displayText } from "../i18n/display-text";
+ import type {
+   Issue,
+   IssueBlockedInboxAttention,
+@@ -249,27 +250,27 @@ export function blockedBadgeTone(rows: readonly BlockedInboxIssueRow[]): Blocked
+ }
+ 
+ export function formatStoppedAge(stoppedSinceAt: string | null, now: number = Date.now()): string {
+-  if (!stoppedSinceAt) return "stopped";
++  if (!stoppedSinceAt) return displayText("stopped");
+   const then = new Date(stoppedSinceAt).getTime();
+-  if (!Number.isFinite(then)) return "stopped";
++  if (!Number.isFinite(then)) return displayText("stopped");
+   const seconds = Math.max(0, Math.round((now - then) / 1000));
+-  if (seconds < 60) return "stopped just now";
++  if (seconds < 60) return displayText("stopped just now");
+   if (seconds < 3600) {
+     const m = Math.floor(seconds / 60);
+-    return `stopped ${m}m`;
++    return displayText("stopped {{v0}}m", { v0: m });
+   }
+   if (seconds < 86_400) {
+     const h = Math.floor(seconds / 3600);
+-    return `stopped ${h}h`;
++    return displayText("stopped {{v0}}h", { v0: h });
+   }
+   if (seconds < 86_400 * 7) {
+     const d = Math.floor(seconds / 86_400);
+-    return `stopped ${d}d`;
++    return displayText("stopped {{v0}}d", { v0: d });
+   }
+   if (seconds < 86_400 * 30) {
+     const w = Math.floor(seconds / (86_400 * 7));
+-    return `stopped ${w}w`;
++    return displayText("stopped {{v0}}w", { v0: w });
+   }
+   const mo = Math.floor(seconds / (86_400 * 30));
+-  return `stopped ${mo}mo`;
++  return displayText("stopped {{v0}}mo", { v0: mo });
+ }
+diff --git a/ui/src/lib/timeAgo.ts b/ui/src/lib/timeAgo.ts
+index 88888bd93..93e06517e 100644
+--- a/ui/src/lib/timeAgo.ts
++++ b/ui/src/lib/timeAgo.ts
+@@ -1,3 +1,5 @@
++import { displayText } from "../i18n/display-text";
++
+ const MINUTE = 60;
+ const HOUR = 60 * MINUTE;
+ const DAY = 24 * HOUR;
+@@ -9,23 +11,23 @@ export function timeAgo(date: Date | string): string {
+   const then = new Date(date).getTime();
+   const seconds = Math.round((now - then) / 1000);
+ 
+-  if (seconds < MINUTE) return "just now";
++  if (seconds < MINUTE) return displayText("just now");
+   if (seconds < HOUR) {
+     const m = Math.floor(seconds / MINUTE);
+-    return `${m}m ago`;
++    return displayText("{{v0}}m ago", { v0: m });
+   }
+   if (seconds < DAY) {
+     const h = Math.floor(seconds / HOUR);
+-    return `${h}h ago`;
++    return displayText("{{v0}}h ago", { v0: h });
+   }
+   if (seconds < WEEK) {
+     const d = Math.floor(seconds / DAY);
+-    return `${d}d ago`;
++    return displayText("{{v0}}d ago", { v0: d });
+   }
+   if (seconds < MONTH) {
+     const w = Math.floor(seconds / WEEK);
+-    return `${w}w ago`;
++    return displayText("{{v0}}w ago", { v0: w });
+   }
+   const mo = Math.floor(seconds / MONTH);
+-  return `${mo}mo ago`;
++  return displayText("{{v0}}mo ago", { v0: mo });
+ }
+diff --git a/ui/src/lib/utils.ts b/ui/src/lib/utils.ts
+index 0c2a2b7c2..2e29e40d8 100644
+--- a/ui/src/lib/utils.ts
++++ b/ui/src/lib/utils.ts
+@@ -1,3 +1,4 @@
++import { displayText } from "../i18n/display-text";
+ import { type ClassValue, clsx } from "clsx";
+ import { twMerge } from "tailwind-merge";
+ import { deriveAgentUrlKey, deriveProjectUrlKey, normalizeProjectUrlKey, hasNonAsciiContent } from "@paperclipai/shared";
+@@ -88,13 +89,13 @@ export function relativeTime(date: Date | string): string {
+   const now = Date.now();
+   const then = new Date(date).getTime();
+   const diffSec = Math.round((now - then) / 1000);
+-  if (diffSec < 60) return "just now";
++  if (diffSec < 60) return displayText("just now");
+   const diffMin = Math.round(diffSec / 60);
+-  if (diffMin < 60) return `${diffMin}m ago`;
++  if (diffMin < 60) return displayText("{{v0}}m ago", { v0: diffMin });
+   const diffHr = Math.round(diffMin / 60);
+-  if (diffHr < 24) return `${diffHr}h ago`;
++  if (diffHr < 24) return displayText("{{v0}}h ago", { v0: diffHr });
+   const diffDay = Math.round(diffHr / 24);
+-  if (diffDay < 30) return `${diffDay}d ago`;
++  if (diffDay < 30) return displayText("{{v0}}d ago", { v0: diffDay });
+   return formatDate(date);
+ }
+ 
+diff --git a/ui/src/lib/vite-display-copy.test.ts b/ui/src/lib/vite-display-copy.test.ts
+new file mode 100644
+index 000000000..3f9b1f0b4
+--- /dev/null
++++ b/ui/src/lib/vite-display-copy.test.ts
+@@ -0,0 +1,64 @@
++import { describe, expect, it } from "vitest";
++import { cleanJsxText, decodeJsxEntities, transformDisplayCopy } from "./vite-display-copy";
++
++function transform(source: string, id = "/repo/ui/src/Example.tsx") {
++  return transformDisplayCopy(source, id);
++}
++
++describe("transformDisplayCopy", () => {
++  it("wraps JSX labels and display attributes but leaves data and payload values alone", () => {
++    const result = transform(
++      'export function Example({ user }) { const payload = { name: "New Agent", status: "done" }; return <><h1>New Agent</h1><p>{user.name}</p><input value={user.name} placeholder="Search agents" /></>; }',
++    );
++    expect(result?.code).toContain('__paperclipDisplayText("New Agent")');
++    expect(result?.code).toContain('placeholder={__paperclipDisplayText("Search agents")}');
++    expect(result?.code).toContain('name: "New Agent"');
++    expect(result?.code).toContain("value={user.name}");
++    expect(result?.code).toContain('import { displayText as __paperclipDisplayText } from "@/i18n/display-text";');
++    expect(result?.strings).toEqual(["New Agent", "Search agents"]);
++  });
++
++  it("skips code, editable content, opted-out zones and options that submit their text", () => {
++    const result = transform(
++      'export function Demo() { return <><pre>Run this command</pre><code>Sample code</code><textarea>Enter content</textarea><div contentEditable>Write here</div><div data-no-translate>Keep this</div><select><option>Submit me</option><option value="a">Show me</option></select><p>Save changes</p></>; }',
++    );
++    expect(result?.strings).toEqual(["Save changes", "Show me"]);
++    expect(result?.code).toContain("<pre>Run this command</pre>");
++    expect(result?.code).toContain("<option>Submit me</option>");
++  });
++
++  it("keeps interpolated values out of the translated sentence", () => {
++    const result = transform("export function Demo({ count }) { return <p title={`Found ${count} agents`}>{`Found ${count} agents`}</p>; }");
++    expect(result?.strings).toEqual(["Found {{v0}} agents"]);
++    expect(result?.code).toContain('__paperclipDisplayText("Found {{v0}} agents", { v0: (count) })');
++  });
++
++  it("wraps both branches of conditionals and the fallback of logical expressions", () => {
++    const result = transform('export function Demo({ open, label }) { return <span>{open ? "Close panel" : "Open panel"}{label || "No label"}</span>; }');
++    expect(result?.strings).toEqual(["Close panel", "No label", "Open panel"]);
++  });
++
++  it("matches the JSX whitespace and entity rules", () => {
++    expect(cleanJsxText("\n      Sign in\n      to continue\n    ")).toBe("Sign in to continue");
++    expect(cleanJsxText(" Hello ")).toBe(" Hello ");
++    expect(decodeJsxEntities("Don&apos;t &amp; won&#39;t&nbsp;stop")).toBe("Don't & won't\u00a0stop");
++    expect(decodeJsxEntities("Unknown &zwsp; entity")).toBeNull();
++    const result = transform("export const Demo = () => <p>Don&apos;t stop</p>;");
++    expect(result?.strings).toEqual(["Don't stop"]);
++  });
++
++  it("keeps the original line count so later lines keep their positions", () => {
++    const source = "export function Demo() {\n  return (\n    <p>\n      First line\n      second line\n    </p>\n  );\n}\n";
++    const result = transform(source);
++    const lines = result?.code.split("\n") ?? [];
++    expect(lines.slice(0, source.split("\n").length - 1).join("\n").split("\n")).toHaveLength(source.split("\n").length - 1);
++    expect(lines[6]).toBe("  );");
++  });
++
++  it("ignores tests, stories and plain TypeScript modules", () => {
++    expect(transform("export const A = () => <p>Hello there</p>;", "/repo/ui/src/A.test.tsx")).toBeNull();
++    expect(transform("export const A = () => <p>Hello there</p>;", "/repo/ui/src/A.stories.tsx")).toBeNull();
++    expect(transform('export const label = "Hello there";', "/repo/ui/src/a.ts")).toBeNull();
++    expect(transform("export const A = () => <p>{count}</p>;")).toBeNull();
++  });
++});
+diff --git a/ui/src/lib/vite-display-copy.ts b/ui/src/lib/vite-display-copy.ts
+new file mode 100644
+index 000000000..b4d86baf0
+--- /dev/null
++++ b/ui/src/lib/vite-display-copy.ts
+@@ -0,0 +1,287 @@
++import { normalizePath, parseAst, type Plugin } from "vite";
++
++interface AstNode {
++  type: string;
++  start: number;
++  end: number;
++  [key: string]: unknown;
++}
++
++interface Edit {
++  start: number;
++  end: number;
++  text: string;
++}
++
++export interface DisplayCopyResult {
++  code: string;
++  strings: string[];
++}
++
++export const DISPLAY_TEXT_MODULE = "@/i18n/display-text";
++export const DISPLAY_TEXT_BINDING = "__paperclipDisplayText";
++
++const DISPLAY_ATTRIBUTES = new Set([
++  "aria-label",
++  "title",
++  "placeholder",
++  "alt",
++  "label",
++  "description",
++  "helperText",
++  "emptyMessage",
++  "confirmLabel",
++  "cancelLabel",
++  "tooltip",
++  "emptyText",
++  "submitLabel",
++  "heading",
++  "subtitle",
++  "footnote",
++]);
++
++const OPAQUE_ELEMENTS = new Set(["code", "pre", "script", "style", "textarea", "kbd", "samp"]);
++const OPT_OUT_ATTRIBUTES = new Set(["contentEditable", "data-no-translate", "dangerouslySetInnerHTML"]);
++const SKIPPED_KEYS = new Set(["type", "start", "end", "range", "loc"]);
++
++const NAMED_ENTITIES: Record<string, string> = {
++  amp: "&",
++  lt: "<",
++  gt: ">",
++  quot: "\"",
++  apos: "'",
++  nbsp: "\u00a0",
++  ndash: "\u2013",
++  mdash: "\u2014",
++  hellip: "\u2026",
++  lsquo: "\u2018",
++  rsquo: "\u2019",
++  ldquo: "\u201c",
++  rdquo: "\u201d",
++  laquo: "\u00ab",
++  raquo: "\u00bb",
++  middot: "\u00b7",
++  bull: "\u2022",
++  times: "\u00d7",
++  larr: "\u2190",
++  rarr: "\u2192",
++  uarr: "\u2191",
++  darr: "\u2193",
++  copy: "\u00a9",
++  reg: "\u00ae",
++  trade: "\u2122",
++  deg: "\u00b0",
++};
++
++function isNode(value: unknown): value is AstNode {
++  return typeof value === "object" && value !== null && typeof (value as { type?: unknown }).type === "string";
++}
++
++function childNode(node: AstNode, key: string): AstNode | null {
++  const value = node[key];
++  return isNode(value) ? value : null;
++}
++
++function childNodes(node: AstNode, key: string): AstNode[] {
++  const value = node[key];
++  return Array.isArray(value) ? value.filter(isNode) : [];
++}
++
++function hasLetters(text: string): boolean {
++  return /[A-Za-z]{2}/.test(text);
++}
++
++function attributeName(attribute: AstNode): string | null {
++  const name = childNode(attribute, "name");
++  return name?.type === "JSXIdentifier" && typeof name.name === "string" ? name.name : null;
++}
++
++export function decodeJsxEntities(raw: string): string | null {
++  let unsupported = false;
++  const decoded = raw.replace(/&(#x[0-9a-fA-F]+|#[0-9]+|[A-Za-z][A-Za-z0-9]*);/g, (match, entity: string) => {
++    if (entity.startsWith("#x") || entity.startsWith("#X")) return String.fromCodePoint(Number.parseInt(entity.slice(2), 16));
++    if (entity.startsWith("#")) return String.fromCodePoint(Number.parseInt(entity.slice(1), 10));
++    const value = NAMED_ENTITIES[entity];
++    if (value === undefined) unsupported = true;
++    return value ?? match;
++  });
++  return unsupported ? null : decoded;
++}
++
++export function cleanJsxText(value: string): string {
++  const lines = value.split(/\r\n|\n|\r/);
++  let lastNonEmptyLine = 0;
++  for (let index = 0; index < lines.length; index++) {
++    if (/[^ \t]/.test(lines[index])) lastNonEmptyLine = index;
++  }
++  let text = "";
++  for (let index = 0; index < lines.length; index++) {
++    let line = lines[index].replace(/\t/g, " ");
++    if (index !== 0) line = line.replace(/^[ ]+/, "");
++    if (index !== lines.length - 1) line = line.replace(/[ ]+$/, "");
++    if (!line) continue;
++    if (index !== lastNonEmptyLine) line += " ";
++    text += line;
++  }
++  return text;
++}
++
++function countLineBreaks(text: string): number {
++  return (text.match(/\n/g) ?? []).length;
++}
++
++export function isDisplayCopyModule(id: string): boolean {
++  const file = id.split("?")[0];
++  return /\.[jt]sx$/.test(file) && !/\.(test|spec|stories)\.[jt]sx$/.test(file) && !file.includes("/node_modules/");
++}
++
++export function transformDisplayCopy(code: string, id: string): DisplayCopyResult | null {
++  if (!isDisplayCopyModule(id)) return null;
++  const file = id.split("?")[0];
++  const program = parseAst(code, { lang: file.endsWith(".jsx") ? "jsx" : "tsx" }) as unknown as AstNode;
++  const edits: Edit[] = [];
++  const strings = new Set<string>();
++
++  const call = (text: string, values?: string) => {
++    strings.add(text);
++    return `${DISPLAY_TEXT_BINDING}(${JSON.stringify(text)}${values ? `, ${values}` : ""})`;
++  };
++
++  const replace = (node: AstNode, text: string) => {
++    const missing = countLineBreaks(code.slice(node.start, node.end)) - countLineBreaks(text);
++    edits.push({ start: node.start, end: node.end, text: text + "\n".repeat(Math.max(0, missing)) });
++  };
++
++  const wrapExpression = (expression: AstNode | null) => {
++    if (!expression) return;
++    if (expression.type === "Literal" && typeof expression.value === "string") {
++      if (hasLetters(expression.value)) replace(expression, call(expression.value));
++      return;
++    }
++    if (expression.type === "TemplateLiteral") {
++      const quasis = childNodes(expression, "quasis");
++      const expressions = childNodes(expression, "expressions");
++      const cooked = quasis.map((quasi) => (quasi.value as { cooked?: string | null } | undefined)?.cooked);
++      if (cooked.every((part): part is string => typeof part === "string") && hasLetters(cooked.join(""))) {
++        const template = cooked.map((part, index) => part + (index < expressions.length ? `{{v${index}}}` : "")).join("");
++        const values = expressions.length
++          ? `{ ${expressions.map((value, index) => `v${index}: (${code.slice(value.start, value.end)})`).join(", ")} }`
++          : undefined;
++        replace(expression, call(template, values));
++        return;
++      }
++    }
++    if (expression.type === "ConditionalExpression") {
++      visit(childNode(expression, "test"));
++      wrapExpression(childNode(expression, "consequent"));
++      wrapExpression(childNode(expression, "alternate"));
++      return;
++    }
++    if (expression.type === "LogicalExpression") {
++      visit(childNode(expression, "left"));
++      wrapExpression(childNode(expression, "right"));
++      return;
++    }
++    if (expression.type === "ParenthesizedExpression") {
++      wrapExpression(childNode(expression, "expression"));
++      return;
++    }
++    visit(expression);
++  };
++
++  const visitChildren = (nodes: AstNode[]) => {
++    for (const node of nodes) {
++      if (node.type === "JSXText" && typeof node.value === "string") {
++        const decoded = decodeJsxEntities(node.value);
++        if (decoded === null) continue;
++        const text = cleanJsxText(decoded);
++        if (hasLetters(text)) replace(node, `{${call(text)}}`);
++        continue;
++      }
++      if (node.type === "JSXExpressionContainer") {
++        wrapExpression(childNode(node, "expression"));
++        continue;
++      }
++      visit(node);
++    }
++  };
++
++  const visitAttribute = (attribute: AstNode) => {
++    const name = attributeName(attribute);
++    const value = childNode(attribute, "value");
++    if (!name || !value || !DISPLAY_ATTRIBUTES.has(name)) {
++      visit(value);
++      return;
++    }
++    if (value.type === "Literal" && typeof value.value === "string") {
++      const decoded = decodeJsxEntities(value.value);
++      if (decoded !== null && hasLetters(decoded)) replace(value, `{${call(decoded)}}`);
++      return;
++    }
++    if (value.type === "JSXExpressionContainer") {
++      wrapExpression(childNode(value, "expression"));
++      return;
++    }
++    visit(value);
++  };
++
++  function visit(node: AstNode | null) {
++    if (!node) return;
++    if (node.type === "JSXElement") {
++      const opening = childNode(node, "openingElement");
++      const name = opening ? childNode(opening, "name") : null;
++      const attributes = opening ? childNodes(opening, "attributes") : [];
++      const elementName = name?.type === "JSXIdentifier" && typeof name.name === "string" ? name.name : null;
++      if (elementName && OPAQUE_ELEMENTS.has(elementName)) return;
++      if (attributes.some((attribute) => OPT_OUT_ATTRIBUTES.has(attributeName(attribute) ?? ""))) return;
++      if (elementName === "option" && !attributes.some((attribute) => attributeName(attribute) === "value")) return;
++      for (const attribute of attributes) {
++        if (attribute.type === "JSXAttribute") visitAttribute(attribute);
++        else visit(attribute);
++      }
++      visitChildren(childNodes(node, "children"));
++      return;
++    }
++    if (node.type === "JSXFragment") {
++      visitChildren(childNodes(node, "children"));
++      return;
++    }
++    for (const [key, value] of Object.entries(node)) {
++      if (SKIPPED_KEYS.has(key)) continue;
++      if (Array.isArray(value)) {
++        for (const item of value) if (isNode(item)) visit(item);
++      } else if (isNode(value)) {
++        visit(value);
++      }
++    }
++  }
++
++  visit(program);
++  if (edits.length === 0) return null;
++  edits.sort((left, right) => right.start - left.start);
++  let output = code;
++  for (const edit of edits) output = output.slice(0, edit.start) + edit.text + output.slice(edit.end);
++  output += `\nimport { displayText as ${DISPLAY_TEXT_BINDING} } from ${JSON.stringify(DISPLAY_TEXT_MODULE)};\n`;
++  return { code: output, strings: [...strings].sort() };
++}
++
++export function displayCopyPlugin(): Plugin {
++  let sourceRoot = "";
++  return {
++    name: "paperclip-display-copy",
++    enforce: "pre",
++    configResolved(config) {
++      sourceRoot = `${normalizePath(config.root)}/src/`;
++    },
++    transform(code, id) {
++      if (!normalizePath(id).startsWith(sourceRoot)) return null;
++      let result: DisplayCopyResult | null;
++      try {
++        result = transformDisplayCopy(code, id);
++      } catch {
++        return null;
++      }
++      return result ? { code: result.code, map: null } : null;
++    },
++  };
++}
+diff --git a/ui/src/main.tsx b/ui/src/main.tsx
+index 239bc8282..5e1f3e1b0 100644
+--- a/ui/src/main.tsx
++++ b/ui/src/main.tsx
+@@ -25,6 +25,7 @@ import { PluginLauncherProvider } from "./plugins/launchers";
+ import { startPerfMeasureReaper } from "./lib/perf-measure-reaper";
+ import { getOrCreatePaperclipReactRoot } from "./lib/react-root";
+ import { startServiceWorkerUpdates } from "./lib/service-worker-updates";
++import { initDisplayLanguage } from "./i18n/display-text";
+ import "@mdxeditor/editor/style.css";
+ import "./index.css";
+ 
+@@ -67,6 +68,8 @@ function CompanyVoiceCalls({ children }: { children: React.ReactNode }) {
+   return <VoiceCallProvider companyId={selectedCompanyId} userId={userId}>{children}</VoiceCallProvider>;
+ }
+ 
++await initDisplayLanguage();
++
+ const rootElement = document.getElementById("root");
+ if (!rootElement) throw new Error("Paperclip root element is missing");
+ 
+diff --git a/ui/src/pages/Auth.tsx b/ui/src/pages/Auth.tsx
+index c391dfd54..839567b04 100644
+--- a/ui/src/pages/Auth.tsx
++++ b/ui/src/pages/Auth.tsx
+@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
+ import { AsciiArtAnimation } from "@/components/AsciiArtAnimation";
+ import { PaperclipLoading } from "@/components/AnimatedPaperclipIcon";
+ import { ThemeToggle } from "@/components/ThemeToggle";
++import { DisplayLanguageSelect } from "@/components/DisplayLanguageSelect";
+ import { PaperclipLockup } from "../components/PaperclipLockup";
+ 
+ type AuthMode = "sign_in" | "sign_up";
+@@ -101,7 +102,8 @@ export function AuthPage() {
+ 
+   return (
+     <div className="fixed inset-0 flex bg-background">
+-      <div className="absolute top-4 right-4 z-10">
++      <div className="absolute top-4 right-4 z-10 flex items-center gap-3">
++        <DisplayLanguageSelect />
+         <ThemeToggle />
+       </div>
+       {/* Left half — form */}
+diff --git a/ui/vite.config.ts b/ui/vite.config.ts
+index 2e71bdc76..2a1cb83af 100644
+--- a/ui/vite.config.ts
++++ b/ui/vite.config.ts
+@@ -6,6 +6,7 @@ import { createUiDevWatchOptions } from "./src/lib/vite-watch";
+ import { createApiProxy } from "./src/lib/vite-api-proxy";
+ import { serviceWorkerBuildIdPlugin } from "./src/lib/vite-sw-build-id";
+ import { readBrowserBuildCommit } from "./src/lib/vite-build-commit";
++import { displayCopyPlugin } from "./src/lib/vite-display-copy";
+ 
+ const apiProxy = createApiProxy();
+ 
+@@ -28,7 +29,7 @@ export default defineConfig(({ mode }) => ({
+       readBrowserBuildCommit(__dirname),
+     ),
+   },
+-  plugins: [react(), tailwindcss(), serviceWorkerBuildIdPlugin(), preloadIssueDetail()],
++  plugins: [displayCopyPlugin(), react(), tailwindcss(), serviceWorkerBuildIdPlugin(), preloadIssueDetail()],
+   build: {
+     minify: "esbuild",
+     rolldownOptions: {

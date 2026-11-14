@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Tests, anti-leak, gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Catalog is valid JSON
+        run: python3 -m json.tool catalog/fr.json > /dev/null
+      - name: Install/uninstall tests
+        run: bash tests/test-install.sh
+      - name: Anti-leak
+        env:
+          # Private-name patterns live in a repo secret, never in the public tree.
+          LEAK_EXTRA_PATTERN: ${{ secrets.LEAK_EXTRA_PATTERN }}
+          REQUIRE_EXTRA_PATTERN: "1"
+        run: bash scripts/check-anti-leak.sh
+      - name: gitleaks
+        run: |
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz | tar xz gitleaks
+          ./gitleaks detect --source . --no-banner --redact
