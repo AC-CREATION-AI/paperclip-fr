@@ -23,7 +23,7 @@ Interface de [Paperclip](https://github.com/paperclipai/paperclip) en français,
 
 `install.sh` essaie les patches du plus récent au plus ancien et applique le premier qui s'adapte. Si aucun ne convient, il ne modifie rien et le dit.
 
-Un patch peut avoir un fichier `<nom>.pins.json` à côté de lui : empreintes SHA-256 « avant » de chaque fichier touché. `install.sh` ne retient alors ce patch que si l'arbre cible correspond à toutes les empreintes (cas de `canary11-chat.patch`, qui préserve le correctif chat). Contrôle hors ligne sur une vraie source : `scripts/check-canary11.sh <clone-paperclip> [<patch-correctif-chat>]`.
+Un patch peut avoir un fichier `<nom>.pins.json` à côté de lui : empreintes SHA-256 « avant » de chaque fichier touché. `install.sh` ne retient alors ce patch que si l'arbre cible correspond à toutes les empreintes (cas de `canary11-chat.patch`, qui préserve le correctif chat). Contrôle hors ligne sur une vraie source : `scripts/check-canary11.sh <clone-paperclip> [<patch-correctif-chat>]` ou `scripts/check-all-targets.sh <clone-paperclip> [<patch-correctif-chat>]` pour vérifier toutes les cibles amont en une passe.
 
 ## Installation
 
